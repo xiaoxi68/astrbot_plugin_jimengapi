@@ -1,6 +1,6 @@
 # AstrBot 插件：即梦2 API（生图/改图/视频）
 
-对接 “即梦2” 开放 API，提供文生图（/v1/images/generations）与图生图（/v1/images/compositions）能力。
+对接 即梦2API，提供文生图与图生图，文生视频能力。
 
 - 命令：`/即梦生图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64]`
 - 命令：`/即梦改图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64] [strength=0.7]`（需引用或附带图片）
@@ -31,3 +31,7 @@
 
 - 若启用 `fmt=b64`，将落盘到 `images/` 再发送；如跨机部署可结合 `NAP` 进行转发
 - `session_token` 必填；网络异常有重试（`max_retry_attempts` 可配）
+
+## 鸣谢
+
+- 即梦2api项目:https://github.com/iptag/jimeng-api
