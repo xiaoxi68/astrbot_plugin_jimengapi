@@ -15,17 +15,20 @@
   "model": {
     "description": "默认模型名称",
     "type": "string",
-    "default": "jimeng-4.0"
+    "default": "jimeng-4.0",
+    "options": ["jimeng-4.0"]
   },
   "default_ratio": {
     "description": "默认图像比例",
     "type": "string",
-    "default": "1:1"
+    "default": "1:1",
+    "options": ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9"]
   },
   "default_resolution": {
     "description": "默认分辨率（1k/2k/4k）",
     "type": "string",
-    "default": "2k"
+    "default": "2k",
+    "options": ["1k", "2k", "4k"]
   },
   "negative_prompt": {
     "description": "默认负面提示词（可选）",
@@ -40,7 +43,8 @@
   "response_format": {
     "description": "响应格式（url 或 b64_json）",
     "type": "string",
-    "default": "url"
+    "default": "url",
+    "options": ["url", "b64_json"]
   },
   "callback_api_base": {
     "description": "AstrBot 回调文件服务（可将本地文件转为可访问 URL）",
@@ -61,12 +65,17 @@
     "description": "HTTP 请求最大重试次数（网络抖动时）",
     "type": "int",
     "default": 3
-  }
-  ,
+  },
   "video_model": {
     "description": "默认视频模型名称（如 jimeng-video-3.0）",
     "type": "string",
-    "default": "jimeng-video-3.0"
+    "default": "jimeng-video-3.0",
+    "options": [
+      "jimeng-video-3.0-pro",
+      "jimeng-video-3.0",
+      "jimeng-video-2.0-pro",
+      "jimeng-video-2.0"
+    ]
   },
   "video_stream": {
     "description": "是否使用流式（SSE）模式生成视频链接",
