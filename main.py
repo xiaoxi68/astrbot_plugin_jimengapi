@@ -49,15 +49,73 @@ class JimengPlugin(Star):
         self.rate_limit_window_minutes = int(config.get("rate_limit_window_minutes", 10))
         self.rate_limit_max_calls = int(config.get("rate_limit_max_calls", 5))
 
+        # 定时清理配置
+        self.cleanup_enabled = bool(config.get("cleanup_enabled", True))
+        self.cleanup_every_days = int(config.get("cleanup_every_days", 3))
+
         # 运行时状态
         self._usage = {}  # group_id -> list[timestamps]
         self._usage_lock = asyncio.Lock()
+        self._cleanup_task = None
+        self._cleanup_stop = asyncio.Event()
 
         self.callback_api_base = config.get("callback_api_base", "").strip()
         self.nap_server_address = config.get("nap_server_address", "localhost").strip()
         self.nap_server_port = int(config.get("nap_server_port", 3658))
 
         self._global_loaded = False
+
+    async def initialize(self):
+        """启动后台清理任务（若启用）。"""
+        if self.cleanup_enabled and (self._cleanup_task is None or self._cleanup_task.done()):
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+            logger.info("即梦插件：已启动定时清理任务")
+
+    async def terminate(self):
+        """停止后台清理任务。"""
+        try:
+            self._cleanup_stop.set()
+            if self._cleanup_task:
+                self._cleanup_task.cancel()
+        except Exception as e:
+            logger.debug(f"停止清理任务异常: {e}")
+
+    async def _cleanup_once(self):
+        try:
+            base = Path(__file__).parent
+            total = 0
+            for folder in ("images", "videos"):
+                p = base / folder
+                if not p.exists() or not p.is_dir():
+                    continue
+                for fp in p.iterdir():
+                    try:
+                        if not fp.is_file():
+                            continue
+                        fp.unlink(missing_ok=True)
+                        total += 1
+                    except Exception as e:
+                        logger.debug(f"清理 {fp} 失败: {e}")
+            if total:
+                logger.info(f"即梦插件：清理完成，本次删除 {total} 个文件")
+        except Exception as e:
+            logger.error(f"执行清理任务失败: {e}")
+
+    async def _cleanup_loop(self):
+        try:
+            # 初次延迟，避免冷启动拥挤
+            await asyncio.sleep(10)
+            while not self._cleanup_stop.is_set():
+                await self._cleanup_once()
+                days = max(1, int(self.cleanup_every_days))
+                try:
+                    await asyncio.wait_for(self._cleanup_stop.wait(), timeout=days * 86400)
+                except asyncio.TimeoutError:
+                    continue
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"清理任务异常退出: {e}")
 
     async def _load_global_config(self):
         if self._global_loaded:

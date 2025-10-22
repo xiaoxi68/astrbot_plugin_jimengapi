@@ -119,5 +119,16 @@
     "description": "每个窗口内最大调用次数（每群）",
     "type": "int",
     "default": 5
+  },
+  "cleanup_enabled": {
+    "description": "是否启用定时清理缓存(images/videos)",
+    "type": "bool",
+    "default": true
+  },
+  "cleanup_every_days": {
+    "description": "清理执行周期（天）",
+    "type": "int",
+    "default": 3
   }
 }
+
