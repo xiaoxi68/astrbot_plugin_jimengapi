@@ -1,4 +1,4 @@
-# AstrBot 插件：即梦2 API（生图/改图）
+# AstrBot 插件：即梦2 API（生图/改图/视频）
 
 对接 “即梦2” 开放 API，提供文生图（/v1/images/generations）与图生图（/v1/images/compositions）能力。
 

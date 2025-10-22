@@ -14,7 +14,7 @@ import base64
 from pathlib import Path
 
 
-@register("jimengapi-image", "Codex", "对接‘即梦2’API，支持生图与图生图", "0.1.0")
+@register("astrbot_plugin_jimengapi", "薄暝", "对接‘即梦2’API，支持生图与图生图，视频", "0.2.0")
 class JimengPlugin(Star):
     def __init__(self, context: Context, config: dict):
         super().__init__(context)
