@@ -2,11 +2,9 @@
 
 对接 “即梦2” 开放 API，提供文生图（/v1/images/generations）与图生图（/v1/images/compositions）能力。
 
-- 命令：`/jgen <prompt> [ratio=1:1] [res=2k] [fmt=url|b64]`
-- 命令：`/jedit <prompt> [ratio=1:1] [res=2k] [fmt=url|b64] [strength=0.7]`（需引用或附带图片）
-- LLM 工具：`jimeng-image-gen(image_description: str, use_reference_images: bool=True)`
-- 视频命令：`/jvideo <prompt> [model=jimeng-video-3.0] [stream=true|false]`
-- 视频工具：`jimeng-video-gen(video_description: str, prefer_stream: bool=True)`
+- 命令：`/即梦生图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64]`
+- 命令：`/即梦改图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64] [strength=0.7]`（需引用或附带图片）
+- 命令：`/即梦视频 <prompt> [model=jimeng-video-3.0] [stream=true|false]`
 
 ## 安装与配置
 

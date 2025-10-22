@@ -178,8 +178,9 @@ class JimengPlugin(Star):
             return Plain(video_path)
 
     # 命令：/jvideo <prompt> [model=jimeng-video-3.0] [stream=true|false]
-    @filter.command("jvideo")
+    @filter.command("即梦视频")
     async def jvideo(self, event: AstrMessageEvent):
+        """生成视频"""
         await self._load_global_config()
         text = event.message_str or ""
         if not text:
@@ -226,7 +227,7 @@ class JimengPlugin(Star):
             logger.error(f"视频生成失败: {e}")
             yield event.plain_result(f"视频生成失败：{e}")
 
-    @llm_tool(name="jimeng-video-gen")
+    # removed llm_tool: jimeng-video-gen
     async def llm_video_gen(self, event: AstrMessageEvent, video_description: str, prefer_stream: bool = True):
         await self._load_global_config()
         cfg = self._cfg()
@@ -250,8 +251,9 @@ class JimengPlugin(Star):
             yield event.chain_result([Plain(f"视频生成失败：{e}")])
 
     # 命令：/jgen <prompt> [ratio=1:1] [res=2k] [fmt=url|b64]
-    @filter.command("jgen")
+    @filter.command("即梦生图")
     async def jgen(self, event: AstrMessageEvent):
+        """生成图片"""
         await self._load_global_config()
         text = event.message_str or ""
         if not text:
@@ -319,8 +321,9 @@ class JimengPlugin(Star):
             yield event.plain_result(f"生图失败：{e}")
 
     # 命令：/jedit <prompt> [ratio=1:1] [res=2k] [fmt=url|b64] [strength=0.7]
-    @filter.command("jedit")
+    @filter.command("即梦改图")
     async def jedit(self, event: AstrMessageEvent):
+        """修改图片"""
         await self._load_global_config()
         text = event.message_str or ""
         if not text:
@@ -394,7 +397,7 @@ class JimengPlugin(Star):
             yield event.plain_result(f"改图失败：{e}")
 
     # LLM 工具：方便在会话代理中被调用
-    @llm_tool(name="jimeng-image-gen")
+    # removed llm_tool: jimeng-image-gen
     async def llm_image_gen(self, event: AstrMessageEvent, image_description: str, use_reference_images: bool = True):
         await self._load_global_config()
         cfg = self._cfg()
