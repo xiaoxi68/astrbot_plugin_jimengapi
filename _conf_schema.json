@@ -1,0 +1,76 @@
+{
+  "base_url": {
+    "description": "即梦2 API 基础地址（例如：http://localhost:5100）",
+    "type": "string",
+    "default": "http://localhost:5100",
+    "obvious_hint": true
+  },
+  "session_token": {
+    "description": "API 授权 Session（用于 Authorization: Bearer 认证）",
+    "type": "string",
+    "hint": "YOUR_SESSION_ID",
+    "default": "",
+    "obvious_hint": true
+  },
+  "model": {
+    "description": "默认模型名称",
+    "type": "string",
+    "default": "jimeng-4.0"
+  },
+  "default_ratio": {
+    "description": "默认图像比例",
+    "type": "string",
+    "default": "1:1"
+  },
+  "default_resolution": {
+    "description": "默认分辨率（1k/2k/4k）",
+    "type": "string",
+    "default": "2k"
+  },
+  "negative_prompt": {
+    "description": "默认负面提示词（可选）",
+    "type": "string",
+    "default": ""
+  },
+  "sample_strength": {
+    "description": "图生图采样强度（0.0-1.0）",
+    "type": "float",
+    "default": 0.7
+  },
+  "response_format": {
+    "description": "响应格式（url 或 b64_json）",
+    "type": "string",
+    "default": "url"
+  },
+  "callback_api_base": {
+    "description": "AstrBot 回调文件服务（可将本地文件转为可访问 URL）",
+    "type": "string",
+    "default": ""
+  },
+  "nap_server_address": {
+    "description": "NAP cat 服务地址（仅跨机文件转发场景需要）",
+    "type": "string",
+    "default": "localhost"
+  },
+  "nap_server_port": {
+    "description": "NAP cat 文件端口（仅跨机文件转发场景需要）",
+    "type": "int",
+    "default": 3658
+  },
+  "max_retry_attempts": {
+    "description": "HTTP 请求最大重试次数（网络抖动时）",
+    "type": "int",
+    "default": 3
+  }
+  ,
+  "video_model": {
+    "description": "默认视频模型名称（如 jimeng-video-3.0）",
+    "type": "string",
+    "default": "jimeng-video-3.0"
+  },
+  "video_stream": {
+    "description": "是否使用流式（SSE）模式生成视频链接",
+    "type": "bool",
+    "default": true
+  }
+}
