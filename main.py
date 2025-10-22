@@ -385,9 +385,9 @@ class JimengPlugin(Star):
         try:
             if self.log_timing:
                 with timing(self.log_level, tag, "api_video", model=self.video_model, stream=bool(stream_opt if stream_opt is not None else self.video_stream)):
-                    vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt)
+                    vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt, session_tokens=self.session_tokens)
             else:
-                vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt)
+                vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt, session_tokens=self.session_tokens)
             if not vurl and not raw:
                 log_with("ERROR", tag, "video_failed")
                 yield event.plain_result("视频生成失败，请稍后再试。")
@@ -427,7 +427,7 @@ class JimengPlugin(Star):
         await self._load_global_config()
         cfg = self._cfg()
         try:
-            vurl, raw = await jm_video(cfg, prompt=video_description, stream=prefer_stream)
+            vurl, raw = await jm_video(cfg, prompt=video_description, stream=prefer_stream, session_tokens=self.session_tokens)
             if vurl:
                 videos_dir = Path(__file__).parent / "videos"
                 video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
@@ -505,6 +505,7 @@ class JimengPlugin(Star):
                         resolution=res,
                         negative_prompt=None,
                         response_format=fmt,
+                        session_tokens=self.session_tokens,
                     )
             else:
                 image_url, b64 = await jm_generate(
@@ -623,6 +624,7 @@ class JimengPlugin(Star):
                         sample_strength=strength,
                         negative_prompt=None,
                         response_format=fmt,
+                        session_tokens=self.session_tokens,
                     )
             else:
                 image_url, b64 = await jm_compose(
@@ -686,9 +688,10 @@ class JimengPlugin(Star):
                     cfg,
                     prompt=image_description,
                     image_urls=image_urls,
+                    session_tokens=self.session_tokens,
                 )
             else:
-                image_url, b64 = await jm_generate(cfg, prompt=image_description)
+                image_url, b64 = await jm_generate(cfg, prompt=image_description, session_tokens=self.session_tokens)
 
             if not image_url and not b64:
                 yield event.chain_result([Plain("图像生成失败，请稍后再试。")])

@@ -118,7 +118,7 @@ async def generate_video(
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Video generation via /v1/chat/completions.
-    Returns (video_url, raw_text). If URL未找到，raw_text保留SSE合成文本以便上层回退展示。
+    Only returns when拿到可用视频直链；否则继续轮询下一个 token。
     """
     url = cfg.base_url.rstrip("/") + "/v1/chat/completions"
     use_model = (model or cfg.video_model)
@@ -137,6 +137,7 @@ async def generate_video(
         logger.error("No session token(s) provided")
         return None, None
 
+    last_text: Optional[str] = None
     for idx, tok in enumerate(tokens, start=1):
         headers = {
             "Content-Type": "application/json",
@@ -146,7 +147,12 @@ async def generate_video(
             text = await _request_sse(url, payload, headers)
             if text:
                 vurl = _extract_first_url(text)
-                return (vurl, text)
+                if vurl:
+                    return (vurl, text)
+                # 记录最后一次文本，继续尝试下一个 token
+                last_text = text
+                logger.info(f"video: token #{idx} produced no direct url, trying next")
+                continue
         else:
             data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
             if data:
@@ -155,9 +161,10 @@ async def generate_video(
                 except Exception:
                     content = ""
                 vurl = _extract_first_url(content)
-                return (vurl, content or None)
+                if vurl:
+                    return (vurl, content or None)
         logger.info(f"video: token #{idx} failed, trying next if any")
-    return None, None
+    return None, last_text
 
 
 async def generate_image(
