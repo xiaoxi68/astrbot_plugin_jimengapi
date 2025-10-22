@@ -94,5 +94,30 @@
     "description": "是否使用流式（SSE）模式生成视频链接",
     "type": "bool",
     "default": true
+  },
+  "group_whitelist": {
+    "description": "群白名单（非空时仅允许这些群使用插件）",
+    "type": "list",
+    "default": []
+  },
+  "group_blacklist": {
+    "description": "群黑名单（这些群禁止使用插件）",
+    "type": "list",
+    "default": []
+  },
+  "rate_limit_enabled": {
+    "description": "是否启用每群频率限制",
+    "type": "bool",
+    "default": false
+  },
+  "rate_limit_window_minutes": {
+    "description": "频率限制窗口（分钟）",
+    "type": "int",
+    "default": 10
+  },
+  "rate_limit_max_calls": {
+    "description": "每个窗口内最大调用次数（每群）",
+    "type": "int",
+    "default": 5
   }
 }

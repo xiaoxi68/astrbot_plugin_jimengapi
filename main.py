@@ -11,6 +11,8 @@ from .utils.downloader import download_to_images_dir
 
 import aiofiles
 import base64
+import asyncio
+import time
 from pathlib import Path
 
 
@@ -39,6 +41,17 @@ class JimengPlugin(Star):
         # 视频默认配置
         self.video_model = config.get("video_model", "jimeng-video-3.0").strip()
         self.video_stream = bool(config.get("video_stream", True))
+
+        # 权限与限流配置
+        self.group_whitelist = [str(x).strip() for x in config.get("group_whitelist", []) if str(x).strip()]
+        self.group_blacklist = [str(x).strip() for x in config.get("group_blacklist", []) if str(x).strip()]
+        self.rate_limit_enabled = bool(config.get("rate_limit_enabled", False))
+        self.rate_limit_window_minutes = int(config.get("rate_limit_window_minutes", 10))
+        self.rate_limit_max_calls = int(config.get("rate_limit_max_calls", 5))
+
+        # 运行时状态
+        self._usage = {}  # group_id -> list[timestamps]
+        self._usage_lock = asyncio.Lock()
 
         self.callback_api_base = config.get("callback_api_base", "").strip()
         self.nap_server_address = config.get("nap_server_address", "localhost").strip()
@@ -73,6 +86,19 @@ class JimengPlugin(Star):
             # 视频配置（全局覆盖）
             self.video_model = cfg.get("video_model", self.video_model)
             self.video_stream = bool(cfg.get("video_stream", self.video_stream))
+            # 权限与限流（全局覆盖）
+            wl = cfg.get("group_whitelist")
+            if isinstance(wl, list):
+                self.group_whitelist = [str(x).strip() for x in wl if str(x).strip()]
+            bl = cfg.get("group_blacklist")
+            if isinstance(bl, list):
+                self.group_blacklist = [str(x).strip() for x in bl if str(x).strip()]
+            if "rate_limit_enabled" in cfg:
+                self.rate_limit_enabled = bool(cfg.get("rate_limit_enabled", self.rate_limit_enabled))
+            if "rate_limit_window_minutes" in cfg:
+                self.rate_limit_window_minutes = int(cfg.get("rate_limit_window_minutes", self.rate_limit_window_minutes))
+            if "rate_limit_max_calls" in cfg:
+                self.rate_limit_max_calls = int(cfg.get("rate_limit_max_calls", self.rate_limit_max_calls))
             self._global_loaded = True
         except Exception as e:
             logger.error(f"加载全局配置失败: {e}")
@@ -118,6 +144,40 @@ class JimengPlugin(Star):
             except Exception as e:
                 logger.warning(f"生成回调URL失败，使用本地文件发送: {e}")
         return Image.fromFileSystem(image_path)
+
+    async def _check_group_policy(self, event: AstrMessageEvent) -> tuple[bool, str]:
+        """群黑白名单与每群频率限制检查。私聊不受限。"""
+        gid = None
+        try:
+            gid = event.get_group_id()
+        except Exception:
+            gid = None
+        # 仅群聊受限
+        if not gid:
+            return True, ""
+        gid = str(gid)
+        # 白名单优先：非空则必须命中
+        if self.group_whitelist and gid not in self.group_whitelist:
+            return False, "本群未在白名单，禁止使用此插件。"
+        # 黑名单拦截
+        if gid in self.group_blacklist:
+            return False, "本群在黑名单中，已禁止使用此插件。"
+        # 频率限制
+        if not self.rate_limit_enabled:
+            return True, ""
+        window_sec = max(1, int(self.rate_limit_window_minutes) * 60)
+        max_calls = max(1, int(self.rate_limit_max_calls))
+        now = time.time()
+        async with self._usage_lock:
+            lst = self._usage.get(gid, [])
+            # 清理窗口外
+            lst = [ts for ts in lst if now - ts < window_sec]
+            if len(lst) >= max_calls:
+                return False, f"频率限制：每{self.rate_limit_window_minutes}分钟最多{self.rate_limit_max_calls}次，本群已达上限，请稍后再试。"
+            # 记录一次
+            lst.append(now)
+            self._usage[gid] = lst
+        return True, ""
 
     async def _component_to_http_url(self, comp) -> str | None:
         """尽量把任意图片组件转换为可用于对接 API 的 http(s) 链接。
@@ -196,9 +256,13 @@ class JimengPlugin(Star):
     async def jvideo(self, event: AstrMessageEvent):
         """生成视频"""
         await self._load_global_config()
+        ok, msg = await self._check_group_policy(event)
+        if not ok:
+            yield event.plain_result(msg)
+            return
         text = event.message_str or ""
         if not text:
-            yield event.plain_result("请提供视频描述，如 /jvideo 海浪拍打海岸")
+            yield event.plain_result("请提供视频描述，如 /即梦视频 海浪拍打海岸")
             return
 
         model = None
@@ -269,9 +333,13 @@ class JimengPlugin(Star):
     async def jgen(self, event: AstrMessageEvent):
         """生成图片"""
         await self._load_global_config()
+        ok, msg = await self._check_group_policy(event)
+        if not ok:
+            yield event.plain_result(msg)
+            return
         text = event.message_str or ""
         if not text:
-            yield event.plain_result("请提供生成描述，如 /jgen 一只可爱的小猫咪")
+            yield event.plain_result("请提供生成描述，如 /即梦生图 一只可爱的小猫咪")
             return
 
         # 解析简单的 kv 选项
@@ -339,9 +407,13 @@ class JimengPlugin(Star):
     async def jedit(self, event: AstrMessageEvent):
         """修改图片"""
         await self._load_global_config()
+        ok, msg = await self._check_group_policy(event)
+        if not ok:
+            yield event.plain_result(msg)
+            return
         text = event.message_str or ""
         if not text:
-            yield event.plain_result("请提供修改描述，并附带或引用图片，如 /jedit 转油画风格")
+            yield event.plain_result("请提供修改描述，并附带或引用图片，如 /即梦改图 转油画风格")
             return
 
         ratio, res, fmt, strength = None, None, None, None
