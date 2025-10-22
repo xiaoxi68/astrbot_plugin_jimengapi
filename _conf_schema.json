@@ -130,37 +130,6 @@
     "description": "清理执行周期（天）",
     "type": "int",
     "default": 3
-  },
-  "log_level": {
-    "description": "日志级别",
-    "type": "string",
-    "default": "INFO",
-    "options": ["ERROR", "WARN", "INFO", "DEBUG"]
-  },
-  "log_verbose": {
-    "description": "输出更详细的运行日志",
-    "type": "bool",
-    "default": true
-  },
-  "log_trace_http": {
-    "description": "记录HTTP请求/响应关键字段（勿记录敏感信息）",
-    "type": "bool",
-    "default": false
-  },
-  "log_media_headers": {
-    "description": "记录媒体下载响应头(仅关键信息)",
-    "type": "bool",
-    "default": false
-  },
-  "log_policy": {
-    "description": "记录群策略与限流判定",
-    "type": "bool",
-    "default": true
-  },
-  "log_timing": {
-    "description": "记录关键耗时(生成/下载/发送)",
-    "type": "bool",
-    "default": true
   }
 }
 

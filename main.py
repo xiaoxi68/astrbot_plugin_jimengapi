@@ -45,7 +45,7 @@ class JimengPlugin(Star):
         self.video_stream = bool(config.get("video_stream", True))
 
         # 日志配置（不占用插件配置项，可用环境变量覆盖）
-        self.log_level = os.getenv("JIMENG_LOG_LEVEL", "INFO").upper()
+        self.log_level = os.getenv("JIMENG_LOG_LEVEL", "DEBUG").upper()
         self.log_verbose = os.getenv("JIMENG_LOG_VERBOSE", "true").lower() in ("1","true","yes","on")
         self.log_trace_http = os.getenv("JIMENG_LOG_TRACE_HTTP", "false").lower() in ("1","true","yes","on")
         self.log_media_headers = os.getenv("JIMENG_LOG_MEDIA_HEADERS", "false").lower() in ("1","true","yes","on")
