@@ -3,7 +3,7 @@ import asyncio
 import base64
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Sequence
 
 from astrbot.api import logger
 
@@ -12,6 +12,7 @@ from astrbot.api import logger
 class JimengConfig:
     base_url: str
     session_token: str
+    session_tokens: Optional[List[str]] = None
     model: str = "jimeng-4.0"
     default_ratio: str = "1:1"
     default_resolution: str = "2k"
@@ -113,16 +114,13 @@ async def generate_video(
     prompt: str,
     model: Optional[str] = None,
     stream: Optional[bool] = None,
+    session_tokens: Optional[Sequence[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Video generation via /v1/chat/completions.
     Returns (video_url, raw_text). If URL未找到，raw_text保留SSE合成文本以便上层回退展示。
     """
     url = cfg.base_url.rstrip("/") + "/v1/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg.session_token}",
-    }
     use_model = (model or cfg.video_model)
     use_stream = cfg.video_stream if stream is None else stream
 
@@ -134,22 +132,32 @@ async def generate_video(
         "stream": bool(use_stream),
     }
 
-    if use_stream:
-        text = await _request_sse(url, payload, headers)
-        if not text:
-            return None, None
-        vurl = _extract_first_url(text)
-        return (vurl, text)
-    else:
-        data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
-        if not data:
-            return None, None
-        try:
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        except Exception:
-            content = ""
-        vurl = _extract_first_url(content)
-        return (vurl, content or None)
+    tokens = list(session_tokens or cfg.session_tokens or ([cfg.session_token] if cfg.session_token else []))
+    if not tokens:
+        logger.error("No session token(s) provided")
+        return None, None
+
+    for idx, tok in enumerate(tokens, start=1):
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {tok}",
+        }
+        if use_stream:
+            text = await _request_sse(url, payload, headers)
+            if text:
+                vurl = _extract_first_url(text)
+                return (vurl, text)
+        else:
+            data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
+            if data:
+                try:
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                except Exception:
+                    content = ""
+                vurl = _extract_first_url(content)
+                return (vurl, content or None)
+        logger.info(f"video: token #{idx} failed, trying next if any")
+    return None, None
 
 
 async def generate_image(
@@ -159,16 +167,13 @@ async def generate_image(
     resolution: Optional[str] = None,
     negative_prompt: Optional[str] = None,
     response_format: Optional[str] = None,
+    session_tokens: Optional[Sequence[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Text-to-image via /v1/images/generations.
     Returns: (image_url, b64_data)
     """
     url = cfg.base_url.rstrip("/") + "/v1/images/generations"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg.session_token}",
-    }
     payload = {
         "model": cfg.model,
         "prompt": prompt,
@@ -182,22 +187,28 @@ async def generate_image(
     if rf in ("url", "b64_json"):
         payload["response_format"] = rf
 
-    data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
-    if not data:
+    tokens = list(session_tokens or cfg.session_tokens or ([cfg.session_token] if cfg.session_token else []))
+    if not tokens:
+        logger.error("No session token(s) provided")
         return None, None
 
-    # Expected response:
-    # { "created": 1759058, "data": [{"url": "..."}] } or b64_json style
-    try:
-        first = (data.get("data") or [None])[0]
-        if not first:
-            return None, None
-        if "url" in first:
-            return first["url"], None
-        if "b64_json" in first:
-            return None, first["b64_json"]
-    except Exception as e:
-        logger.error(f"Unexpected response payload: {e}")
+    for idx, tok in enumerate(tokens, start=1):
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {tok}",
+        }
+        data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
+        if data:
+            try:
+                first = (data.get("data") or [None])[0]
+                if first:
+                    if "url" in first:
+                        return first["url"], None
+                    if "b64_json" in first:
+                        return None, first["b64_json"]
+            except Exception as e:
+                logger.error(f"Unexpected response payload: {e}")
+        logger.info(f"image: token #{idx} failed, trying next if any")
     return None, None
 
 
@@ -210,16 +221,13 @@ async def compose_image(
     sample_strength: Optional[float] = None,
     negative_prompt: Optional[str] = None,
     response_format: Optional[str] = None,
+    session_tokens: Optional[Sequence[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Image-to-image via /v1/images/compositions using JSON with URL images.
     Returns: (image_url, b64_data)
     """
     url = cfg.base_url.rstrip("/") + "/v1/images/compositions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg.session_token}",
-    }
     payload = {
         "model": cfg.model,
         "prompt": prompt,
@@ -236,18 +244,26 @@ async def compose_image(
     if rf in ("url", "b64_json"):
         payload["response_format"] = rf
 
-    data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
-    if not data:
+    tokens = list(session_tokens or cfg.session_tokens or ([cfg.session_token] if cfg.session_token else []))
+    if not tokens:
+        logger.error("No session token(s) provided")
         return None, None
 
-    try:
-        first = (data.get("data") or [None])[0]
-        if not first:
-            return None, None
-        if "url" in first:
-            return first["url"], None
-        if "b64_json" in first:
-            return None, first["b64_json"]
-    except Exception as e:
-        logger.error(f"Unexpected response payload: {e}")
+    for idx, tok in enumerate(tokens, start=1):
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {tok}",
+        }
+        data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
+        if data:
+            try:
+                first = (data.get("data") or [None])[0]
+                if first:
+                    if "url" in first:
+                        return first["url"], None
+                    if "b64_json" in first:
+                        return None, first["b64_json"]
+            except Exception as e:
+                logger.error(f"Unexpected response payload: {e}")
+        logger.info(f"compose: token #{idx} failed, trying next if any")
     return None, None

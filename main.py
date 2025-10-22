@@ -21,6 +21,14 @@ class JimengPlugin(Star):
         # 配置项（可被全局配置覆盖）
         self.base_url = config.get("base_url", "http://localhost:5100").strip()
         self.session_token = config.get("session_token", "").strip()
+        # 支持多个 Session（轮询），向后兼容旧字段
+        tokens_cfg = config.get("session_tokens", [])
+        if isinstance(tokens_cfg, list):
+            self.session_tokens = [str(x).strip() for x in tokens_cfg if str(x).strip()]
+        else:
+            self.session_tokens = []
+        if self.session_token and not self.session_tokens:
+            self.session_tokens = [self.session_token]
         self.model = config.get("model", "jimeng-4.0").strip()
         self.default_ratio = config.get("default_ratio", "1:1").strip()
         self.default_resolution = config.get("default_resolution", "2k").strip()
@@ -47,7 +55,13 @@ class JimengPlugin(Star):
                 self._global_loaded = True
                 return
             self.base_url = cfg.get("base_url", self.base_url)
+            # tokens: 新优先，旧字段兼容
+            tokens = cfg.get("session_tokens")
+            if isinstance(tokens, list):
+                self.session_tokens = [str(x).strip() for x in tokens if str(x).strip()] or self.session_tokens
             self.session_token = cfg.get("session_token", self.session_token)
+            if self.session_token and not self.session_tokens:
+                self.session_tokens = [self.session_token]
             self.model = cfg.get("model", self.model)
             self.default_ratio = cfg.get("default_ratio", self.default_ratio)
             self.default_resolution = cfg.get("default_resolution", self.default_resolution)
@@ -68,6 +82,7 @@ class JimengPlugin(Star):
         return JimengConfig(
             base_url=self.base_url,
             session_token=self.session_token,
+            session_tokens=self.session_tokens,
             model=self.model,
             default_ratio=self.default_ratio,
             default_resolution=self.default_resolution,

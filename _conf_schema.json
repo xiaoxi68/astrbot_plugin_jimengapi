@@ -5,12 +5,18 @@
     "default": "http://localhost:5100",
     "obvious_hint": true
   },
-  "session_token": {
-    "description": "API 授权 Session（用于 Authorization: Bearer 认证）",
-    "type": "string",
+  "session_tokens": {
+    "description": "API 授权 Session 列表（Authorization: Bearer），支持轮询以扩容额度",
+    "type": "list",
     "hint": "YOUR_SESSION_ID",
-    "default": "",
+    "default": ["YOUR_SESSION_ID_1", "YOUR_SESSION_ID_2"],
     "obvious_hint": true
+  },
+  "session_token": {
+    "description": "单个 Session（兼容旧版）",
+    "type": "string",
+    "default": "",
+    "invisible": true
   },
   "model": {
     "description": "默认模型名称",
@@ -41,15 +47,17 @@
     "default": 0.7
   },
   "response_format": {
-    "description": "响应格式（url 或 b64_json）",
+    "description": "响应格式（内部使用）",
     "type": "string",
     "default": "url",
-    "options": ["url", "b64_json"]
+    "options": ["url", "b64_json"],
+    "invisible": true
   },
   "callback_api_base": {
-    "description": "AstrBot 回调文件服务（可将本地文件转为可访问 URL）",
+    "description": "AstrBot 回调文件服务（内部使用）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "invisible": true
   },
   "nap_server_address": {
     "description": "NAP cat 服务地址（仅跨机文件转发场景需要）",
