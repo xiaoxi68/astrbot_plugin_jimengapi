@@ -43,8 +43,18 @@ class JimengPlugin(Star):
         self.video_stream = bool(config.get("video_stream", True))
 
         # 权限与限流配置
-        self.group_whitelist = [str(x).strip() for x in config.get("group_whitelist", []) if str(x).strip()]
-        self.group_blacklist = [str(x).strip() for x in config.get("group_blacklist", []) if str(x).strip()]
+        self.group_list_mode = str(config.get("group_list_mode", "blacklist")).strip().lower()
+        self.groups = [str(x).strip() for x in config.get("groups", []) if str(x).strip()]
+        # 兼容旧字段（若新字段未配置且旧字段存在）
+        if not self.groups:
+            old_wl = config.get("group_whitelist")
+            old_bl = config.get("group_blacklist")
+            if isinstance(old_wl, list) and old_wl:
+                self.group_list_mode = "whitelist"
+                self.groups = [str(x).strip() for x in old_wl if str(x).strip()]
+            elif isinstance(old_bl, list) and old_bl:
+                self.group_list_mode = "blacklist"
+                self.groups = [str(x).strip() for x in old_bl if str(x).strip()]
         self.rate_limit_enabled = bool(config.get("rate_limit_enabled", False))
         self.rate_limit_window_minutes = int(config.get("rate_limit_window_minutes", 10))
         self.rate_limit_max_calls = int(config.get("rate_limit_max_calls", 5))
@@ -145,12 +155,20 @@ class JimengPlugin(Star):
             self.video_model = cfg.get("video_model", self.video_model)
             self.video_stream = bool(cfg.get("video_stream", self.video_stream))
             # 权限与限流（全局覆盖）
-            wl = cfg.get("group_whitelist")
-            if isinstance(wl, list):
-                self.group_whitelist = [str(x).strip() for x in wl if str(x).strip()]
-            bl = cfg.get("group_blacklist")
-            if isinstance(bl, list):
-                self.group_blacklist = [str(x).strip() for x in bl if str(x).strip()]
+            if "group_list_mode" in cfg:
+                self.group_list_mode = str(cfg.get("group_list_mode", self.group_list_mode)).strip().lower()
+            if "groups" in cfg and isinstance(cfg.get("groups"), list):
+                self.groups = [str(x).strip() for x in cfg.get("groups", []) if str(x).strip()]
+            # 旧字段回退
+            if not self.groups:
+                wl = cfg.get("group_whitelist")
+                bl = cfg.get("group_blacklist")
+                if isinstance(wl, list) and wl:
+                    self.group_list_mode = "whitelist"
+                    self.groups = [str(x).strip() for x in wl if str(x).strip()]
+                elif isinstance(bl, list) and bl:
+                    self.group_list_mode = "blacklist"
+                    self.groups = [str(x).strip() for x in bl if str(x).strip()]
             if "rate_limit_enabled" in cfg:
                 self.rate_limit_enabled = bool(cfg.get("rate_limit_enabled", self.rate_limit_enabled))
             if "rate_limit_window_minutes" in cfg:
@@ -214,12 +232,14 @@ class JimengPlugin(Star):
         if not gid:
             return True, ""
         gid = str(gid)
-        # 白名单优先：非空则必须命中
-        if self.group_whitelist and gid not in self.group_whitelist:
-            return False, "本群未在白名单，禁止使用此插件。"
-        # 黑名单拦截
-        if gid in self.group_blacklist:
-            return False, "本群在黑名单中，已禁止使用此插件。"
+        mode = (self.group_list_mode or "blacklist").lower()
+        groups = self.groups or []
+        if mode == "whitelist":
+            if groups and gid not in groups:
+                return False, "本群未在白名单，禁止使用此插件。"
+        else:  # blacklist
+            if gid in groups:
+                return False, "本群在黑名单中，已禁止使用此插件。"
         # 频率限制
         if not self.rate_limit_enabled:
             return True, ""

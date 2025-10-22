@@ -95,13 +95,14 @@
     "type": "bool",
     "default": true
   },
-  "group_whitelist": {
-    "description": "群白名单（非空时仅允许这些群使用插件）",
-    "type": "list",
-    "default": []
+  "group_list_mode": {
+    "description": "群名单模式（whitelist=白名单，blacklist=黑名单）",
+    "type": "string",
+    "default": "blacklist",
+    "options": ["whitelist", "blacklist"]
   },
-  "group_blacklist": {
-    "description": "群黑名单（这些群禁止使用插件）",
+  "groups": {
+    "description": "群名单（依据模式为白/黑名单）",
     "type": "list",
     "default": []
   },
