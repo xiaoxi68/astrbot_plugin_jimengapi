@@ -8,11 +8,13 @@ from .utils.jimeng_client import JimengConfig, generate_image as jm_generate, co
 from .utils.jimeng_client import generate_video as jm_video
 from .utils.file_send_server import send_file
 from .utils.downloader import download_to_images_dir
+from .utils.plugin_logger import mk_req_id, log_with, timing
 
 import aiofiles
 import base64
 import asyncio
 import time
+import os
 from pathlib import Path
 
 
@@ -41,6 +43,14 @@ class JimengPlugin(Star):
         # 视频默认配置
         self.video_model = config.get("video_model", "jimeng-video-3.0").strip()
         self.video_stream = bool(config.get("video_stream", True))
+
+        # 日志配置（不占用插件配置项，可用环境变量覆盖）
+        self.log_level = os.getenv("JIMENG_LOG_LEVEL", "INFO").upper()
+        self.log_verbose = os.getenv("JIMENG_LOG_VERBOSE", "true").lower() in ("1","true","yes","on")
+        self.log_trace_http = os.getenv("JIMENG_LOG_TRACE_HTTP", "false").lower() in ("1","true","yes","on")
+        self.log_media_headers = os.getenv("JIMENG_LOG_MEDIA_HEADERS", "false").lower() in ("1","true","yes","on")
+        self.log_policy = os.getenv("JIMENG_LOG_POLICY", "true").lower() in ("1","true","yes","on")
+        self.log_timing = os.getenv("JIMENG_LOG_TIMING", "true").lower() in ("1","true","yes","on")
 
         # 权限与限流配置
         self.group_list_mode = str(config.get("group_list_mode", "blacklist")).strip().lower()
@@ -334,8 +344,23 @@ class JimengPlugin(Star):
     async def jvideo(self, event: AstrMessageEvent):
         """生成视频"""
         await self._load_global_config()
+        req = mk_req_id()
+        gid = None
+        sid = None
+        try:
+            gid = event.get_group_id()
+        except Exception:
+            gid = None
+        try:
+            sid = event.get_session_id()
+        except Exception:
+            sid = None
+        tag = f"JIMENG|video|req={req}|gid={gid}|sid={sid}"
+        if self.log_verbose:
+            log_with(self.log_level, tag, "recv", text=event.message_str)
         ok, msg = await self._check_group_policy(event)
         if not ok:
+            log_with("WARN", tag, "policy_block", reason=msg)
             yield event.plain_result(msg)
             return
         text = event.message_str or ""
@@ -358,20 +383,34 @@ class JimengPlugin(Star):
 
         cfg = self._cfg()
         try:
-            vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt)
+            if self.log_timing:
+                with timing(self.log_level, tag, "api_video", model=self.video_model, stream=bool(stream_opt if stream_opt is not None else self.video_stream)):
+                    vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt)
+            else:
+                vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt)
             if not vurl and not raw:
+                log_with("ERROR", tag, "video_failed")
                 yield event.plain_result("视频生成失败，请稍后再试。")
                 return
 
             if vurl:
                 # 统一策略：下载到本地再发送，避免外链被 QQ 拒绝
                 videos_dir = Path(__file__).parent / "videos"
-                video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
+                if self.log_timing:
+                    with timing(self.log_level, tag, "download_video", url=vurl):
+                        video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
+                else:
+                    video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
                 if not video_path:
+                    log_with("WARN", tag, "video_download_pending", url=vurl)
                     yield event.chain_result([Plain(f"视频生成成功，但暂未获取可下载的视频文件：{vurl}")])
                     return
                 if self.nap_server_address and self.nap_server_address != "localhost":
-                    sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
+                    if self.log_timing:
+                        with timing(self.log_level, tag, "nap_transfer"):
+                            sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
+                    else:
+                        sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
                     video_path = sent or video_path
                 comp = await self._video_from_path(video_path)
                 yield event.chain_result([comp])
@@ -411,8 +450,23 @@ class JimengPlugin(Star):
     async def jgen(self, event: AstrMessageEvent):
         """生成图片"""
         await self._load_global_config()
+        req = mk_req_id()
+        gid = None
+        sid = None
+        try:
+            gid = event.get_group_id()
+        except Exception:
+            gid = None
+        try:
+            sid = event.get_session_id()
+        except Exception:
+            sid = None
+        tag = f"JIMENG|image_gen|req={req}|gid={gid}|sid={sid}"
+        if self.log_verbose:
+            log_with(self.log_level, tag, "recv", text=event.message_str)
         ok, msg = await self._check_group_policy(event)
         if not ok:
+            log_with("WARN", tag, "policy_block", reason=msg)
             yield event.plain_result(msg)
             return
         text = event.message_str or ""
@@ -442,14 +496,25 @@ class JimengPlugin(Star):
 
         cfg = self._cfg()
         try:
-            image_url, b64 = await jm_generate(
-                cfg,
-                prompt=prompt,
-                ratio=ratio,
-                resolution=res,
-                negative_prompt=None,
-                response_format=fmt,
-            )
+            if self.log_timing:
+                with timing(self.log_level, tag, "api_image_gen", model=self.model, ratio=ratio or self.default_ratio, res=res or self.default_resolution):
+                    image_url, b64 = await jm_generate(
+                        cfg,
+                        prompt=prompt,
+                        ratio=ratio,
+                        resolution=res,
+                        negative_prompt=None,
+                        response_format=fmt,
+                    )
+            else:
+                image_url, b64 = await jm_generate(
+                    cfg,
+                    prompt=prompt,
+                    ratio=ratio,
+                    resolution=res,
+                    negative_prompt=None,
+                    response_format=fmt,
+                )
             if not image_url and not b64:
                 yield event.plain_result("生成失败，请检查 API 配置或稍后再试。")
                 return
@@ -457,12 +522,21 @@ class JimengPlugin(Star):
             if image_url:
                 # 改为：下载到本地 → 统一发送，避免外链被 QQ 拒绝
                 images_dir = Path(__file__).parent / "images"
-                image_path = await download_to_images_dir(image_url, images_dir)
+                if self.log_timing:
+                    with timing(self.log_level, tag, "download_image", url=image_url):
+                        image_path = await download_to_images_dir(image_url, images_dir)
+                else:
+                    image_path = await download_to_images_dir(image_url, images_dir)
                 if not image_path:
+                    log_with("ERROR", tag, "image_download_failed", url=image_url)
                     yield event.plain_result("下载图片失败，请稍后再试。")
                     return
                 if self.nap_server_address and self.nap_server_address != "localhost":
-                    sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
+                    if self.log_timing:
+                        with timing(self.log_level, tag, "nap_transfer"):
+                            sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
+                    else:
+                        sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
                     image_path = sent or image_path
                 comp = await self._image_from_path_with_callback(image_path)
                 yield event.chain_result([comp])
@@ -485,8 +559,23 @@ class JimengPlugin(Star):
     async def jedit(self, event: AstrMessageEvent):
         """修改图片"""
         await self._load_global_config()
+        req = mk_req_id()
+        gid = None
+        sid = None
+        try:
+            gid = event.get_group_id()
+        except Exception:
+            gid = None
+        try:
+            sid = event.get_session_id()
+        except Exception:
+            sid = None
+        tag = f"JIMENG|image_edit|req={req}|gid={gid}|sid={sid}"
+        if self.log_verbose:
+            log_with(self.log_level, tag, "recv", text=event.message_str)
         ok, msg = await self._check_group_policy(event)
         if not ok:
+            log_with("WARN", tag, "policy_block", reason=msg)
             yield event.plain_result(msg)
             return
         text = event.message_str or ""
@@ -523,28 +612,50 @@ class JimengPlugin(Star):
 
         cfg = self._cfg()
         try:
-            image_url, b64 = await jm_compose(
-                cfg,
-                prompt=prompt,
-                image_urls=image_urls,
-                ratio=ratio,
-                resolution=res,
-                sample_strength=strength,
-                negative_prompt=None,
-                response_format=fmt,
-            )
+            if self.log_timing:
+                with timing(self.log_level, tag, "api_image_edit", model=self.model, imgs=len(image_urls)):
+                    image_url, b64 = await jm_compose(
+                        cfg,
+                        prompt=prompt,
+                        image_urls=image_urls,
+                        ratio=ratio,
+                        resolution=res,
+                        sample_strength=strength,
+                        negative_prompt=None,
+                        response_format=fmt,
+                    )
+            else:
+                image_url, b64 = await jm_compose(
+                    cfg,
+                    prompt=prompt,
+                    image_urls=image_urls,
+                    ratio=ratio,
+                    resolution=res,
+                    sample_strength=strength,
+                    negative_prompt=None,
+                    response_format=fmt,
+                )
             if not image_url and not b64:
                 yield event.plain_result("改图失败，请检查 API 配置或稍后再试。")
                 return
 
             if image_url:
                 images_dir = Path(__file__).parent / "images"
-                image_path = await download_to_images_dir(image_url, images_dir)
+                if self.log_timing:
+                    with timing(self.log_level, tag, "download_image", url=image_url):
+                        image_path = await download_to_images_dir(image_url, images_dir)
+                else:
+                    image_path = await download_to_images_dir(image_url, images_dir)
                 if not image_path:
+                    log_with("ERROR", tag, "image_download_failed", url=image_url)
                     yield event.plain_result("下载图片失败，请稍后再试。")
                     return
                 if self.nap_server_address and self.nap_server_address != "localhost":
-                    sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
+                    if self.log_timing:
+                        with timing(self.log_level, tag, "nap_transfer"):
+                            sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
+                    else:
+                        sent = await send_file(image_path, self.nap_server_address, self.nap_server_port)
                     image_path = sent or image_path
                 comp = await self._image_from_path_with_callback(image_path)
                 yield event.chain_result([comp])
