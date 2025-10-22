@@ -177,6 +177,20 @@ class JimengPlugin(Star):
             logger.warning(f"构造视频组件失败，回退为链接: {e}")
             return Plain(video_path)
 
+    @filter.command("即梦帮助")
+    async def jhelp(self, event: AstrMessageEvent):
+        """列出所有指令"""
+        text = (
+            "即梦2 插件指令:\n"
+            "- /即梦生图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64]\n"
+            "  说明: 生成图片。\n"
+            "- /即梦改图 <prompt> [ratio=1:1] [res=2k] [fmt=url|b64] [strength=0.7]\n"
+            "  说明: 修改图片；需附带或引用至少一张图片。\n"
+            "- /即梦视频 <prompt> [model=jimeng-video-3.0] [stream=true|false]\n"
+            "  说明: 生成视频。\n"
+        )
+        yield event.plain_result(text)
+
     # 命令：/jvideo <prompt> [model=jimeng-video-3.0] [stream=true|false]
     @filter.command("即梦视频")
     async def jvideo(self, event: AstrMessageEvent):
