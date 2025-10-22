@@ -366,9 +366,9 @@ class JimengPlugin(Star):
             if vurl:
                 # 统一策略：下载到本地再发送，避免外链被 QQ 拒绝
                 videos_dir = Path(__file__).parent / "videos"
-                video_path = await download_to_images_dir(vurl, videos_dir)
+                video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
                 if not video_path:
-                    yield event.chain_result([Plain(f"视频生成成功，但下载失败：{vurl}")])
+                    yield event.chain_result([Plain(f"视频生成成功，但暂未获取可下载的视频文件：{vurl}")])
                     return
                 if self.nap_server_address and self.nap_server_address != "localhost":
                     sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
@@ -391,7 +391,7 @@ class JimengPlugin(Star):
             vurl, raw = await jm_video(cfg, prompt=video_description, stream=prefer_stream)
             if vurl:
                 videos_dir = Path(__file__).parent / "videos"
-                video_path = await download_to_images_dir(vurl, videos_dir)
+                video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
                 if not video_path:
                     yield event.chain_result([Plain(vurl)])
                     return

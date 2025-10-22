@@ -43,37 +43,44 @@ def _ext_from_url(url: str) -> str:
         return ""
 
 
-async def download_to_images_dir(url: str, images_dir: Path) -> str | None:
-    """Download an image URL to images_dir and return the local file path.
-    Picks extension from content-type or URL; falls back to .png.
+async def download_to_images_dir(url: str, images_dir: Path, prefer_video: bool = False) -> str | None:
+    """Download a media URL to images_dir and return the local file path.
+    - prefer_video=True 时，仅当 Content-Type 为 video/* 或 URL 后缀为常见视频后缀时才保存；否则返回 None。
+    - prefer_video=False 时，按图片策略保存。
     """
     timeout = aiohttp.ClientTimeout(total=60)
-    ext_from_url = _ext_from_url(url)
+    url_ext = _ext_from_url(url)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url) as resp:
                 if resp.status // 100 != 2:
-                    logger.error(f"下载图片失败 HTTP {resp.status}: {url}")
+                    logger.error(f"下载媒体失败 HTTP {resp.status}: {url}")
                     return None
-                ct = resp.headers.get("Content-Type", "")
-                # 优先 Content-Type，再退 URL 后缀；默认：图片用 png，视频用 mp4
-                guessed = _ext_from_content_type(ct)
+                ct = (resp.headers.get("Content-Type") or "").lower()
+                # prefer_video: 仅接收视频
+                if prefer_video:
+                    is_video_ct = ct.startswith("video/")
+                    is_video_ext = url_ext in {"mp4", "webm", "mov", "mkv"}
+                    if not (is_video_ct or is_video_ext):
+                        logger.warning(f"目标并非视频内容(ct={ct or 'unknown'}), 跳过下载: {url}")
+                        return None
+                # 猜测后缀
+                guessed = _ext_from_content_type(ct) or url_ext
                 if not guessed:
-                    guessed = ext_from_url
-                if not guessed:
-                    guessed = "mp4" if (ct and ct.lower().startswith("video/")) else "png"
+                    guessed = "mp4" if prefer_video else "png"
                 ext = guessed
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 uid = str(uuid.uuid4())[:8]
                 images_dir.mkdir(exist_ok=True)
-                file_path = images_dir / f"jm_image_{ts}_{uid}.{ext}"
+                prefix = "jm_media"
+                file_path = images_dir / f"{prefix}_{ts}_{uid}.{ext}"
                 data = await resp.read()
                 file_path.write_bytes(data)
-                logger.info(f"已下载图片到本地: {file_path} (ct={ct or 'unknown'})")
+                logger.info(f"已下载媒体到本地: {file_path} (ct={ct or 'unknown'})")
                 return str(file_path)
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-        logger.error(f"下载图片网络失败: {e}")
+        logger.error(f"下载媒体网络失败: {e}")
         return None
     except Exception as e:
-        logger.error(f"下载图片异常: {e}")
+        logger.error(f"下载媒体异常: {e}")
         return None
