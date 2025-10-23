@@ -344,6 +344,11 @@ class JimengPlugin(Star):
     async def jvideo(self, event: AstrMessageEvent):
         """生成视频"""
         await self._load_global_config()
+        # 禁用默认 LLM 回复，避免与本指令重复发消息
+        try:
+            event.call_llm = False
+        except Exception:
+            pass
         req = mk_req_id()
         gid = None
         sid = None
@@ -454,6 +459,10 @@ class JimengPlugin(Star):
     async def jgen(self, event: AstrMessageEvent):
         """生成图片"""
         await self._load_global_config()
+        try:
+            event.call_llm = False
+        except Exception:
+            pass
         req = mk_req_id()
         gid = None
         sid = None
@@ -567,6 +576,10 @@ class JimengPlugin(Star):
     async def jedit(self, event: AstrMessageEvent):
         """修改图片"""
         await self._load_global_config()
+        try:
+            event.call_llm = False
+        except Exception:
+            pass
         req = mk_req_id()
         gid = None
         sid = None
