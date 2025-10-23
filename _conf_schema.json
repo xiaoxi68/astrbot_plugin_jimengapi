@@ -1,12 +1,12 @@
 {
   "base_url": {
-    "description": "即梦2 API 基础地址（例如：http://localhost:5100）",
+    "description": "即梦2API 基础地址（例如：http://localhost:5100）",
     "type": "string",
     "default": "http://localhost:5100",
     "obvious_hint": true
   },
   "session_tokens": {
-    "description": "API 授权 Session 列表（Authorization: Bearer），支持轮询以扩容额度",
+    "description": "API 授权 Session 列表(国际站需要手动添加us-)，支持轮询",
     "type": "list",
     "hint": "YOUR_SESSION_ID",
     "default": ["YOUR_SESSION_ID_1", "YOUR_SESSION_ID_2"],
@@ -26,7 +26,8 @@
       "jimeng-4.0",
       "jimeng-3.1",
       "jimeng-3.0",
-      "jimeng-2.1"
+      "jimeng-2.1",
+      "nanobanana"
     ]
   },
   "default_ratio": {
@@ -65,12 +66,12 @@
     "invisible": true
   },
   "nap_server_address": {
-    "description": "NAP cat 服务地址（仅跨机文件转发场景需要）",
+    "description": "NAPCAT 服务地址（仅跨机文件转发场景需要）",
     "type": "string",
     "default": "localhost"
   },
   "nap_server_port": {
-    "description": "NAP cat 文件端口（仅跨机文件转发场景需要）",
+    "description": "NAPCAT 文件端口（仅跨机文件转发场景需要）",
     "type": "int",
     "default": 3658
   },
