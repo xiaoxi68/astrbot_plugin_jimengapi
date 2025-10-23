@@ -3,7 +3,7 @@ import asyncio
 import base64
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple, Sequence
+from typing import List, Optional, Tuple, Sequence, Dict
 
 from astrbot.api import logger
 
@@ -22,6 +22,7 @@ class JimengConfig:
     max_retry_attempts: int = 3
     video_model: str = "jimeng-video-3.0"
     video_stream: bool = True
+    # 可选：视频宽高与分辨率可通过命令参数传入，不放 Schema
 
 
 async def _request_json(
@@ -165,6 +166,68 @@ async def generate_video(
                     return (vurl, content or None)
         logger.info(f"video: token #{idx} failed, trying next if any")
     return None, last_text
+
+
+async def generate_video_v2(
+    cfg: JimengConfig,
+    prompt: str,
+    model: Optional[str] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    resolution: Optional[str] = None,
+    file_urls: Optional[Sequence[str]] = None,
+    response_format: Optional[str] = None,
+    session_tokens: Optional[Sequence[str]] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    New video generation endpoint: POST /v1/videos/generations
+    Supports text-to-video and image-to-video via fileUrls (first as first frame, second as last frame).
+    Returns (video_url, b64_json) on success, otherwise (None, None).
+    """
+    url = cfg.base_url.rstrip("/") + "/v1/videos/generations"
+    use_model = (model or cfg.video_model)
+
+    payload: Dict[str, object] = {
+        "model": use_model,
+        "prompt": prompt,
+    }
+    if width:
+        payload["width"] = int(width)
+    if height:
+        payload["height"] = int(height)
+    if resolution:
+        payload["resolution"] = resolution
+    rf = (response_format or cfg.response_format).lower().strip()
+    if rf in ("url", "b64_json"):
+        payload["response_format"] = rf
+
+    # fileUrls / filePaths 兼容文档的写法
+    if file_urls:
+        payload["filePaths"] = list(file_urls)
+
+    tokens = list(session_tokens or cfg.session_tokens or ([cfg.session_token] if cfg.session_token else []))
+    if not tokens:
+        logger.error("No session token(s) provided")
+        return None, None
+
+    for idx, tok in enumerate(tokens, start=1):
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {tok}",
+        }
+        data = await _request_json("POST", url, json=payload, headers=headers, max_retry=cfg.max_retry_attempts)
+        if data:
+            try:
+                first = (data.get("data") or [None])[0]
+                if first:
+                    if "url" in first:
+                        return first["url"], None
+                    if "b64_json" in first:
+                        return None, first["b64_json"]
+            except Exception as e:
+                logger.error(f"Unexpected video payload: {e}")
+        logger.info(f"video_v2: token #{idx} failed, trying next if any")
+    return None, None
 
 
 async def generate_image(

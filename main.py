@@ -5,7 +5,7 @@ from astrbot.api.all import *
 from astrbot.core.message.components import Reply
 
 from .utils.jimeng_client import JimengConfig, generate_image as jm_generate, compose_image as jm_compose
-from .utils.jimeng_client import generate_video as jm_video
+from .utils.jimeng_client import generate_video_v2 as jm_video_v2
 from .utils.file_send_server import send_file
 from .utils.downloader import download_to_images_dir
 from .utils.plugin_logger import mk_req_id, log_with, timing
@@ -43,6 +43,9 @@ class JimengPlugin(Star):
         # 视频默认配置
         self.video_model = config.get("video_model", "jimeng-video-3.0").strip()
         self.video_stream = bool(config.get("video_stream", True))
+        self.video_width = int(config.get("video_width", 1024)) if str(config.get("video_width", "")).strip() != "" else None
+        self.video_height = int(config.get("video_height", 1024)) if str(config.get("video_height", "")).strip() != "" else None
+        self.video_resolution = str(config.get("video_resolution", "")).strip() or None
 
         # 日志配置（不占用插件配置项，可用环境变量覆盖）
         self.log_level = os.getenv("JIMENG_LOG_LEVEL", "DEBUG").upper()
@@ -164,6 +167,19 @@ class JimengPlugin(Star):
             # 视频配置（全局覆盖）
             self.video_model = cfg.get("video_model", self.video_model)
             self.video_stream = bool(cfg.get("video_stream", self.video_stream))
+            if "video_width" in cfg:
+                try:
+                    self.video_width = int(cfg.get("video_width", self.video_width or 0)) or self.video_width
+                except Exception:
+                    pass
+            if "video_height" in cfg:
+                try:
+                    self.video_height = int(cfg.get("video_height", self.video_height or 0)) or self.video_height
+                except Exception:
+                    pass
+            if "video_resolution" in cfg:
+                vr = str(cfg.get("video_resolution", self.video_resolution or "")).strip()
+                self.video_resolution = vr or self.video_resolution
             # 权限与限流（全局覆盖）
             if "group_list_mode" in cfg:
                 self.group_list_mode = str(cfg.get("group_list_mode", self.group_list_mode)).strip().lower()
@@ -374,7 +390,9 @@ class JimengPlugin(Star):
             return
 
         model = None
-        stream_opt = None
+        width = None
+        height = None
+        vres = None
         parts = text.split()
         prompt = " ".join([p for p in parts if "=" not in p])
         for p in parts:
@@ -383,9 +401,21 @@ class JimengPlugin(Star):
                 k = k.strip().lower(); v = v.strip()
                 if k == "model":
                     model = v
-                elif k == "stream":
-                    stream_opt = (v.lower() in ("1","true","yes","on"))
+                elif k in ("width", "w"):
+                    try:
+                        width = int(v)
+                    except Exception:
+                        pass
+                elif k in ("height", "h"):
+                    try:
+                        height = int(v)
+                    except Exception:
+                        pass
+                elif k in ("res", "resolution"):
+                    vres = v
 
+        # 采集可选首/尾帧的图片 URL
+        file_urls = await self._collect_image_urls_from_event(event)
         cfg = self._cfg()
         try:
             tokens = self.session_tokens or ([self.session_token] if self.session_token else [])
@@ -393,37 +423,68 @@ class JimengPlugin(Star):
                 log_with("ERROR", tag, "no_tokens")
                 yield event.plain_result("未配置 session_tokens 或 session_token，无法生成视频。")
                 return
-            last_raw = None
             for i, tok in enumerate(tokens, start=1):
                 log_with("INFO", tag, "try_token", idx=i)
                 if self.log_timing:
-                    with timing("INFO", tag, "api_video", model=self.video_model, stream=bool(stream_opt if stream_opt is not None else self.video_stream)):
-                        vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt, session_tokens=[tok])
+                    with timing("INFO", tag, "api_video_v2", model=model or self.video_model, width=width or 0, height=height or 0, res=vres or ""):
+                        vurl, b64 = await jm_video_v2(
+                            cfg,
+                            prompt=prompt,
+                            model=model,
+                            width=width,
+                            height=height,
+                            resolution=vres,
+                            file_urls=file_urls,
+                            response_format=None,
+                            session_tokens=[tok],
+                        )
                 else:
-                    vurl, raw = await jm_video(cfg, prompt=prompt, model=model, stream=stream_opt, session_tokens=[tok])
-                if not vurl:
-                    last_raw = raw
-                    continue
-                videos_dir = Path(__file__).parent / "videos"
-                if self.log_timing:
-                    with timing("INFO", tag, "download_video", url=vurl):
-                        video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
-                else:
-                    video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
-                if not video_path:
-                    log_with("WARN", tag, "video_download_pending", url=vurl)
-                    # 下一个 token
-                    continue
-                if self.nap_server_address and self.nap_server_address != "localhost":
+                    vurl, b64 = await jm_video_v2(
+                        cfg,
+                        prompt=prompt,
+                        model=model,
+                        width=width,
+                        height=height,
+                        resolution=vres,
+                        file_urls=file_urls,
+                        response_format=None,
+                        session_tokens=[tok],
+                    )
+                if vurl:
+                    videos_dir = Path(__file__).parent / "videos"
                     if self.log_timing:
-                        with timing("INFO", tag, "nap_transfer"):
-                            sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
+                        with timing("INFO", tag, "download_video", url=vurl):
+                            video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
                     else:
-                        sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
-                    video_path = sent or video_path
-                comp = await self._video_from_path(video_path)
-                yield event.chain_result([comp])
-                return
+                        video_path = await download_to_images_dir(vurl, videos_dir, prefer_video=True)
+                    if not video_path:
+                        log_with("WARN", tag, "video_download_pending", url=vurl)
+                        continue
+                    if self.nap_server_address and self.nap_server_address != "localhost":
+                        if self.log_timing:
+                            with timing("INFO", tag, "nap_transfer"):
+                                sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
+                        else:
+                            sent = await send_file(video_path, self.nap_server_address, self.nap_server_port)
+                        video_path = sent or video_path
+                    comp = await self._video_from_path(video_path)
+                    yield event.chain_result([comp])
+                    return
+                if b64:
+                    # 保存 b64 视频（罕见，若支持）
+                    videos_dir = Path(__file__).parent / "videos"
+                    videos_dir.mkdir(exist_ok=True)
+                    # 简化：直接写入 .mp4，实际可根据规范区分
+                    from base64 import b64decode
+                    from datetime import datetime
+                    import uuid as _uuid
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    uid = str(_uuid.uuid4())[:8]
+                    vpath = videos_dir / f"jm_video_{ts}_{uid}.mp4"
+                    vpath.write_bytes(b64decode(b64))
+                    comp = await self._video_from_path(str(vpath))
+                    yield event.chain_result([comp])
+                    return
             # 全部 token 尝试后仍失败
             log_with("ERROR", tag, "video_all_tokens_failed")
             yield event.plain_result("视频生成失败，请稍后再试。")

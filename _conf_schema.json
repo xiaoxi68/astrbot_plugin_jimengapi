@@ -96,6 +96,21 @@
     "type": "bool",
     "default": true
   },
+  "video_width": {
+    "description": "默认视频宽度（px）",
+    "type": "int",
+    "default": 1024
+  },
+  "video_height": {
+    "description": "默认视频高度（px）",
+    "type": "int",
+    "default": 1024
+  },
+  "video_resolution": {
+    "description": "默认视频分辨率（如 720p，可留空）",
+    "type": "string",
+    "default": ""
+  },
   "group_list_mode": {
     "description": "群名单模式（whitelist=白名单，blacklist=黑名单）",
     "type": "string",
